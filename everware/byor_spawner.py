@@ -67,8 +67,10 @@ class ByorDockerSpawner(CustomDockerSpawner):
     def options_from_form(self, formdata):
         options = {}
         options['byor_is_needed'] = formdata.pop('byor_is_needed', [''])[0].strip() == 'on'
-        for field in ('byor_docker_ip', 'byor_docker_port'):
-            options[field] = formdata.pop(field, [''])[0].strip()
+        if options['byor_is_needed']:
+            options['byor_settings'] = byor_settings = {}
+            for field in ('ip', 'port'):
+                byor_settings[field] = formdata.pop('byor_docker_' + field, None)[0].strip()
         options.update(
             super(ByorDockerSpawner, self).options_from_form(formdata)
         )
@@ -81,16 +83,13 @@ class ByorDockerSpawner(CustomDockerSpawner):
             self._reset_byor()
             return
         self._set_byor_status(ByorDockerSpawner.BYOR_NOT_READY)
-        byor_ip = self.user_options['byor_docker_ip']
-        byor_port = self.user_options['byor_docker_port']
-        self._byor_config['ip'] = byor_ip
-        self._byor_config['port'] = byor_port
-        self.container_ip = byor_ip
+        self._byor_config.update(self.user_options['byor_settings'])
+        self.container_ip = self._byor_config['ip']
         try:
             # version='auto' causes a connection to the daemon.
             # That's why the method must be a coroutine.
             self._byor_config['client'] = docker.Client(
-                '{}:{}'.format(byor_ip, byor_port),
+                '{}:{}'.format(self._byor_config['ip'], self._byor_config['port']),
                 version='auto',
                 timeout=ByorDockerSpawner.byor_timeout
             )
