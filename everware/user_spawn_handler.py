@@ -88,7 +88,7 @@ class SpawnHandler(default_handlers.SpawnHandler):
             return
         form_options = {}
         for key, byte_list in self.request.body_arguments.items():
-            form_options[key] = [ bs.decode('utf8') for bs in byte_list ]
+            form_options[key] = [bs.decode('utf8') for bs in byte_list]
         for key, byte_list in self.request.files.items():
-            form_options["%s_file"%key] = byte_list
+            form_options["{}__file".format(key)] = byte_list
         self._spawn(user, form_options)
