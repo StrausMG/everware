@@ -84,7 +84,6 @@ class ByorDockerSpawner(CustomDockerSpawner):
                     except KeyError:
                         missing_tls_files.append(filename)
                     byor_settings[filename[:-len('.pem')]] = temporary_file
-                print('DDD', missing_tls_files)
                 if missing_tls_files:
                     message = 'Some files necessary for TLS are missing: {}'.format(
                         missing_tls_files
@@ -122,7 +121,6 @@ class ByorDockerSpawner(CustomDockerSpawner):
                 tls=byor_config['tls']
             )
         except DockerException as e:
-            print(e)
             self._is_failed = True
             message = str(e)
             if 'ConnectTimeoutError' in message:
