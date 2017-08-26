@@ -81,5 +81,9 @@ $('#byor_is_needed').on('change', function() {
     class="mdl-textfield__input"/>
     <label class="mdl-textfield__label" for="byor_docker_port">port</label>
 </div>
+<br>If your Docker daemon is protected via TLS (which is recommended), attach corresponding
+<br>"cert.pem", "key.pem" and "ca.pem" files
+    (click <a href="https://docs.docker.com/engine/security/https/" target="_blank"> here</a> for details)
+<br><input type="file" name="byor_credentials" accept="application/x-pem-file" multiple>
 </div>
 </div>
