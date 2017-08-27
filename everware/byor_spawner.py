@@ -1,5 +1,5 @@
 from os.path import join as pjoin
-from tempfile import NamedTemporaryFile
+from tempfile import TemporaryDirectory
 
 import docker
 from docker.errors import DockerException
@@ -13,12 +13,6 @@ class ByorDockerSpawner(CustomDockerSpawner):
     byor_timeout = Int(20, min=1, config=True,
                        help='Timeout for connection to BYOR Docker daemon').default_value
 
-    BYOR_OFF = 'off'  # byor was not requested by user
-    BYOR_ON = 'on'  # byor was requested by user and is ready to use
-    BYOR_NOT_READY = 'not_ready'  # byor was requested by user and is being prepared
-    BYOR_NOT_VALID = 'not_valid'  # byor was requested by user, but something went wrong
-    byor_statuses = [BYOR_OFF, BYOR_ON, BYOR_NOT_READY, BYOR_NOT_VALID]
-
     def __init__(self, **kwargs):
         CustomDockerSpawner.__init__(self, **kwargs)
         self._byor_config = self.make_empty_byor_config()
@@ -30,14 +24,10 @@ class ByorDockerSpawner(CustomDockerSpawner):
     @staticmethod
     def make_empty_byor_config():
         config = {
-            'status': 'off',
             'client': None,
             'ip': None,
             'port': None,
-            'tls': None,
-            'cert': None,
-            'key': None,
-            'ca': None
+            'tls_dir': None
         }
         return config
 
@@ -51,16 +41,6 @@ class ByorDockerSpawner(CustomDockerSpawner):
     @property
     def byor_is_used(self):
         return self.user_options.get('byor_is_needed', False)
-
-    @property
-    def byor_status(self):
-        return self._byor_config['status']
-
-    def _set_byor_status(self, status):
-        if status not in ByorDockerSpawner.byor_statuses:
-            message = 'value must be one of [{}]'.format(', '.join(ByorDockerSpawner.byor_status))
-            raise ValueError(message)
-        self._byor_config['status'] = status
 
     def _reset_byor(self):
         self.container_ip = str(self.__class__.container_ip)
@@ -77,13 +57,13 @@ class ByorDockerSpawner(CustomDockerSpawner):
             if byor_credentials != ['']:
                 byor_files = {x['filename']: x['body'] for x in byor_credentials}
                 missing_tls_files = []
+                byor_settings['tls_dir'] = tls_dir = TemporaryDirectory(prefix='everware')
                 for filename in ('cert.pem', 'key.pem', 'ca.pem'):
-                    temporary_file = NamedTemporaryFile(suffix='-everware')
-                    try:
-                        temporary_file.write(byor_files[filename])
-                    except KeyError:
-                        missing_tls_files.append(filename)
-                    byor_settings[filename[:-len('.pem')]] = temporary_file
+                    with open(pjoin(tls_dir.name, filename), 'wb') as tls_file:
+                        try:
+                            tls_file.write(byor_files[filename])
+                        except KeyError:
+                            missing_tls_files.append(filename)
                 if missing_tls_files:
                     message = 'Some files necessary for TLS are missing: {}'.format(
                         missing_tls_files
@@ -101,16 +81,21 @@ class ByorDockerSpawner(CustomDockerSpawner):
         if not self.byor_is_used:
             self._reset_byor()
             return
-        self._set_byor_status(ByorDockerSpawner.BYOR_NOT_READY)
+
         byor_config = self._byor_config
         byor_config.update(self.user_options['byor_settings'])
         self.container_ip = byor_config['ip']
-        if byor_config['cert'] is not None:
-            byor_config['tls'] = docker.tls.TLSConfig(
-                client_cert=(byor_config['cert'].name, byor_config['key'].name),
-                ca_cert=byor_config['ca'].name,
+
+        tls_dir = byor_config['tls_dir']
+        if tls_dir is not None:
+            tls_config = docker.tls.TLSConfig(
+                client_cert=(pjoin(tls_dir.name, 'cert.pem'), pjoin(tls_dir.name, 'key.pem')),
+                ca_cert=pjoin(tls_dir.name, 'ca.pem'),
                 verify=True
             )
+        else:
+            tls_config = None
+
         try:
             # version='auto' causes a connection to the daemon.
             # That's why the method must be a coroutine.
@@ -118,7 +103,7 @@ class ByorDockerSpawner(CustomDockerSpawner):
                 '{}:{}'.format(byor_config['ip'], byor_config['port']),
                 version='auto',
                 timeout=ByorDockerSpawner.byor_timeout,
-                tls=byor_config['tls']
+                tls=tls_config
             )
         except DockerException as e:
             self._is_failed = True
@@ -136,10 +121,7 @@ class ByorDockerSpawner(CustomDockerSpawner):
             self._add_to_log(log_message, level=2)
             yield self.notify_about_fail(notification_message)
             self._is_building = False
-            self._set_byor_status(ByorDockerSpawner.BYOR_NOT_VALID)
             raise
-        else:
-            self._set_byor_status(ByorDockerSpawner.BYOR_ON)
 
     @gen.coroutine
     def _prepare_for_start(self):
