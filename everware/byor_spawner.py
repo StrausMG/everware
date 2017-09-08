@@ -100,7 +100,6 @@ class ByorDockerSpawner(CustomDockerSpawner):
         )
         return options
 
-    @gen.coroutine
     def _make_byor_docker_client(self):
         tls_dir = self._byor_config['tls_dir']
         if tls_dir is not None:
@@ -122,6 +121,10 @@ class ByorDockerSpawner(CustomDockerSpawner):
         return client
 
     @gen.coroutine
+    def _async_make_byor_docker_client(self):
+        return self._make_byor_docker_client()
+
+    @gen.coroutine
     def _configure_byor(self):
         """Configure BYOR settings or reset them if BYOR is not needed."""
         if not self.byor_is_used:
@@ -133,7 +136,7 @@ class ByorDockerSpawner(CustomDockerSpawner):
         self.container_ip = byor_config['ip']
 
         try:
-            byor_config['client'] = yield self._make_byor_docker_client()
+            byor_config['client'] = yield self._async_make_byor_docker_client()
         except DockerException as e:
             self._is_failed = True
             message = str(e)
@@ -187,20 +190,19 @@ class ByorDockerSpawner(CustomDockerSpawner):
 
     def load_state(self, state):
         byor_state = state.get('byor')
-        if byor_state is None:
-            return
-        byor_config = self._byor_config
-        byor_config['ip'] = byor_state['ip']
-        byor_config['port'] = byor_state['port']
-        if byor_state['tld_is_used']:
-            byor_config['tls_dir'] = self._prepare_tls_dir(byor_state)
-        try:
-            byor_config['client'] = yield self._make_byor_docker_client()
-            self.container_ip = byor_state['ip']
-        except Exception as error:
-            message = 'Failed to create a docker client for user {}. Reason: {}'.format(
-                self.user.name, str(error)
-            )
-            self._add_to_log(message, level=1)
-            self._reset_byor()
+        if byor_state is not None:
+            byor_config = self._byor_config
+            byor_config['ip'] = byor_state['ip']
+            byor_config['port'] = byor_state['port']
+            if byor_state['tld_is_used']:
+                byor_config['tls_dir'] = self._prepare_tls_dir(byor_state)
+            try:
+                byor_config['client'] = self._make_byor_docker_client()
+                self.container_ip = byor_state['ip']
+            except Exception as error:
+                message = 'Failed to create a docker client for user {}. Reason: {}'.format(
+                    self.user.name, str(error)
+                )
+                self._add_to_log(message, level=1)
+                self._reset_byor()
         super(ByorDockerSpawner, self).load_state(state)
