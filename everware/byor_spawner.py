@@ -148,7 +148,9 @@ class ByorDockerSpawner(CustomDockerSpawner):
                     self.byor_timeout
                 )
             else:
-                log_message = "Failed to establish connection with the Docker daemon"
+                log_message = "Failed to establish connection with the Docker daemon. Reason: {}".format(
+                    message
+                )
                 notification_message = log_message
             self._add_to_log(log_message, level=2)
             yield self.notify_about_fail(notification_message)
@@ -189,6 +191,7 @@ class ByorDockerSpawner(CustomDockerSpawner):
         return state
 
     def load_state(self, state):
+        self._byor_config = _make_empty_byor_config()
         byor_state = state.get('byor')
         if byor_state is not None:
             byor_config = self._byor_config
