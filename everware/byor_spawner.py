@@ -65,13 +65,13 @@ class ByorDockerSpawner(CustomDockerSpawner):
         ----------
         content : dict
             Must contain keys "cert.pem", "key.pem" and "ca.pem"
-            mapped to bytes (the contents of the corresponding files).
+            mapped to contents of the corresponding files.
             (May contain anything else)
         """
         tls_dir = TemporaryDirectory(prefix='everware')
         missing_tls_files = []
         for filename in TLS_FILES:
-            with open(pjoin(tls_dir.name, filename), 'wb') as tls_file:
+            with open(pjoin(tls_dir.name, filename), 'w') as tls_file:
                 try:
                     tls_file.write(content[filename])
                 except KeyError:
@@ -93,7 +93,7 @@ class ByorDockerSpawner(CustomDockerSpawner):
                 byor_settings[field] = formdata.pop('byor_docker_' + field, None)[0].strip()
             byor_credentials = formdata.pop('byor_credentials__file', None)
             if byor_credentials is not None:
-                byor_files = {x['filename']: x['body'] for x in byor_credentials}
+                byor_files = {x['filename']: x['body'].decode('utf-8') for x in byor_credentials}
                 byor_settings['tls_dir'] = self._prepare_tls_dir(byor_files)
         options.update(
             super(ByorDockerSpawner, self).options_from_form(formdata)
@@ -183,7 +183,7 @@ class ByorDockerSpawner(CustomDockerSpawner):
         byor_state['tld_is_used'] = tls_dir is not None
         if byor_state['tld_is_used']:
             for filename in TLS_FILES:
-                with open(pjoin(tls_dir.name, filename), 'rb') as tls_file:
+                with open(pjoin(tls_dir.name, filename), encoding='utf-8') as tls_file:
                     byor_state[filename] = tls_file.read()
         state['byor'] = byor_state
         return state
